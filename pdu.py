@@ -6,6 +6,7 @@ from lxml import etree
 import logging
 from time import time
 import telnetlib
+import sys
 
 import multiprocessing
 
@@ -25,6 +26,38 @@ mapping = {
     'CPDU-1BM22B.slac.stanford.edu': 'geist.xml',
     'CPDU-1AC18A1.slac.stanford.edu': 'servertech.telnet',
     'CPDU-1AC18B1.slac.stanford.edu': 'servertech.telnet',
+    'CPDU-1AC25A1.slac.stanford.edu': 'servertech.telnet',
+    'CPDU-1AC25B1.slac.stanford.edu': 'servertech.telnet',
+    'CPDU-1AD25A1.slac.stanford.edu': 'servertech.telnet',
+    'CPDU-1AD25B1.slac.stanford.edu': 'servertech.telnet',
+    'CPDU-1AF18A1.slac.stanford.edu': 'servertech.telnet',
+    'CPDU-1AF18B1.slac.stanford.edu': 'servertech.telnet',
+    'CPDU-1AF25A1.slac.stanford.edu': 'servertech.telnet',
+    'CPDU-1AF25B1.slac.stanford.edu': 'servertech.telnet',
+    'CPDU-1AH18A1.slac.stanford.edu': 'servertech.telnet',
+    'CPDU-1AH18B1.slac.stanford.edu': 'servertech.telnet',
+    'CPDU-1AH25A1.slac.stanford.edu': 'servertech.telnet',
+    'CPDU-1AH25B1.slac.stanford.edu': 'servertech.telnet',
+    'CPDU-1AI18A1.slac.stanford.edu': 'servertech.telnet',
+    'CPDU-1AI18B1.slac.stanford.edu': 'servertech.telnet',
+    'CPDU-1AI25A1.slac.stanford.edu': 'servertech.telnet',
+    'CPDU-1AI25B1.slac.stanford.edu': 'servertech.telnet',
+    'CPDU-2AX27A.slac.stanford.edu': 'eaton.html',
+    'CPDU-2AX27B.slac.stanford.edu': 'eaton.html',
+    'CPDU-2BD02A.slac.stanford.edu': 'eaton.html',
+    'CPDU-2BD02B.slac.stanford.edu': 'eaton.html',
+    'CPDU-2BD03A.slac.stanford.edu': 'eaton.html',
+    'CPDU-2BD03B.slac.stanford.edu': 'eaton.html',
+    'CPDU-2BD04A.slac.stanford.edu': 'eaton.html',
+    'CPDU-2BD04B.slac.stanford.edu': 'eaton.html',
+    'CPDU-2BD06A.slac.stanford.edu': 'eaton.html',
+    'CPDU-2BD06B.slac.stanford.edu': 'eaton.html',
+    'CPDU-2BD07A.slac.stanford.edu': 'eaton.html',
+    'CPDU-2BD07B.slac.stanford.edu': 'eaton.html',
+    'CPDU-2BD08A.slac.stanford.edu': 'eaton.html',
+    'CPDU-2BD08B.slac.stanford.edu': 'eaton.html',
+    'CPDU-2BD10A.slac.stanford.edu': 'eaton.html',
+    'CPDU-2BD10B.slac.stanford.edu': 'eaton.html',
     'CPDU-2BF37G1.slac.stanford.edu': 'eaton.html',
     'CPDU-2BF37G2.slac.stanford.edu': 'eaton.html',
     'CPDU-2BF37U1.slac.stanford.edu': 'eaton.html',
@@ -210,13 +243,19 @@ def send_to_influxdb( data, server='influxdb01.slac.stanford.edu', port=8086, db
     for k,v in data.iteritems():
         for a in v:
             array.append( a )
-    logging.debug('sending to %s' % url )
-    logging.debug(" data\n%s" % '\n'.join(array) )
+    logging.info('sending to %s' % url )
+    logging.info(" data\n%s" % '\n'.join(array) )
     try:
         resp = urllib2.urlopen( url, '\n'.join( array ) )
         code = resp.getcode()
     except urllib2.HTTPError as e:
         logging.error("influx error: %s" % (e.read(),) )
+
+def print_as_influxdb( data ):
+    array = []
+    for k,v in data.iteritems():
+        for a in v:
+            print( a )
 
 
 def worker( device, driver, output ):
@@ -224,12 +263,15 @@ def worker( device, driver, output ):
     actually go and get data and organise it ready for sending to influx; store the data into the output array
     """
     data = []
-    # generate iterator function for data output
-    function = driver( device )
-    for l in map_data( device, function, epoch=None ): #int(time()) ):
-        # logging.error("+ %s -> %s" % (device,l,))
-        data.append( l )
-    output[device] = data
+    try:
+        # generate iterator function for data output
+        function = driver( device )
+        for l in map_data( device, function, epoch=None ): #int(time()) ):
+            # logging.error("+ %s -> %s" % (device,l,))
+            data.append( l )
+        output[device] = data
+    except Exception, e:
+        logging.debug("Error: %s %s" % (device,e))
 
 if __name__ == '__main__':
     
@@ -243,12 +285,15 @@ if __name__ == '__main__':
     parser.add_argument( 'device', help='query specific device', default=[], nargs='*' )
     parser.add_argument( '--driver', help='query with specific driver', choices=[ 'geist.xml', 'eaton.html', 'servertech.telnet' ], default='servertech.telnet' )
 
+    parser.add_argument( '--stdout', help='print as stdout', action='store_true', default=False )
     parser.add_argument( '--dryrun', help='do not upload data', default=False, action='store_true' )
     
     args = vars( parser.parse_args() )
     
     if args['verbose']:
         args['level'] = 'DEBUG'
+    else:
+        args['level'] = 'WARN'
     args['level'] = getattr( logging, args['level'].upper() )
     logging.basicConfig( **args )
     
@@ -267,7 +312,7 @@ if __name__ == '__main__':
 
     for device, d in mapping.iteritems():
 
-        logging.debug("device: %s" % (device,))
+        logging.info("device: %s" % (device,))
         
         # normalise name
         device = device.lower()
@@ -291,5 +336,10 @@ if __name__ == '__main__':
     if args['dryrun']:
         print( dict(data) )
     else:
-        send_to_influxdb( dict(data) )
+        if args['stdout']:
+            print_as_influxdb( dict(data) )
+        else:
+            send_to_influxdb( dict(data) )
+            
+    sys.exit(0)
     
